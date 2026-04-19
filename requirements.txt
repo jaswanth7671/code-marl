@@ -1,0 +1,25 @@
+# ── Core ML ───────────────────────────────────────────────────────────────────
+torch>=2.2.0
+transformers>=4.45.0
+datasets>=2.18.0
+accelerate>=0.30.0
+tokenizers>=0.19.0
+
+# ── QLoRA (4-bit quantization + LoRA adapters) ────────────────────────────────
+bitsandbytes>=0.43.0          # 4-bit / 8-bit quantization
+peft>=0.10.0                  # LoRA, QLoRA adapter framework
+
+# ── GRPO / RL Training ────────────────────────────────────────────────────────
+trl>=0.9.0                    # GRPOTrainer (requires trl >= 0.9)
+
+# ── Flash Attention 2 (install separately — needs CUDA build) ────────────────
+# On Colab A100, run this cell FIRST before importing transformers:
+#   !pip install flash-attn --no-build-isolation
+flash-attn>=2.5.0
+
+# ── Experiment Tracking ───────────────────────────────────────────────────────
+wandb>=0.16.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0
+numpy>=1.26.0
