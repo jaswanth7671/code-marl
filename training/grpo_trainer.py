@@ -111,7 +111,11 @@ def build_training_dataset(max_problems: int = 50):
     problems = load_humaneval(max_problems=max_problems)
     prompts    = [format_for_grpo(p) for p in problems]
     test_cases = [p["test_code"] for p in problems]
-    dataset = Dataset.from_dict({"prompt": prompts})
+    # KEY: include test_code as a dataset column so GRPOTrainer forwards it
+    # to reward_fn via **kwargs, with each row repeated num_generations times.
+    # This ensures completion[i] always gets tested against its own problem's test,
+    # not test_cases[i] which breaks when num_generations > 1.
+    dataset = Dataset.from_dict({"prompt": prompts, "test_code": test_cases})
     print(f"      {len(dataset)} problems ready.")
     print(f"      Sample prompt ending:\n      ...{prompts[0][-120:]!r}")
     return dataset, test_cases

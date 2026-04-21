@@ -44,7 +44,8 @@ def _get_text(completion) -> str:
 def reward_fn(
     completions,
     prompts,
-    test_cases=None,
+    test_code=None,   # preferred: dataset column, repeated correctly by GRPOTrainer
+    test_cases=None,  # legacy fallback (wrong when num_generations > 1)
     **kwargs,
 ) -> list[float]:
     """Reward function for GRPOTrainer.
@@ -52,15 +53,15 @@ def reward_fn(
     Args:
         completions: Completions from the model (string, list of dicts, etc.)
         prompts: Prompts used to generate completions.
-        test_cases: Test assertion strings, one per prompt.
+        test_code: Per-completion test string from the dataset column (correct).
+                   GRPOTrainer repeats each dataset row num_generations times,
+                   so test_code[i] always matches the prompt that generated completion[i].
+        test_cases: Legacy list indexed by i — only correct when num_generations=1.
         **kwargs: Extra args from GRPOTrainer (ignored).
 
     Returns:
         List of float rewards in [0.0, 1.0].
     """
-    if test_cases is None:
-        test_cases = kwargs.get("test_cases", None)
-
     _debug = os.environ.get("MARL_DEBUG", "0") == "1"
 
     rewards = []
@@ -88,7 +89,10 @@ def reward_fn(
                 rewards.append(0.0)
                 continue
 
-            if test_cases and i < len(test_cases):
+            # Pick the right test: prefer dataset column (correct), fall back to list
+            if test_code is not None and i < len(test_code):
+                test = test_code[i]
+            elif test_cases and i < len(test_cases):
                 test = test_cases[i]
             else:
                 rewards.append(0.0)
@@ -105,14 +109,16 @@ def reward_fn(
 
 
 def make_reward_fn_with_tests(test_cases: list):
-    """Factory that returns a reward_fn pre-loaded with test cases."""
+    """Factory that returns a reward_fn.
+
+    test_code now comes from the dataset column (passed via **kwargs by GRPOTrainer).
+    test_cases is kept as a fallback for smoke tests / single-generation use.
+    """
     def _reward_fn(completions, prompts, **kwargs) -> list[float]:
-        return reward_fn(
-            completions=completions,
-            prompts=prompts,
-            test_cases=test_cases,
-            **kwargs,
-        )
+        # If test_code not in kwargs (e.g. smoke test), inject from test_cases
+        if "test_code" not in kwargs:
+            kwargs["test_cases"] = test_cases
+        return reward_fn(completions=completions, prompts=prompts, **kwargs)
     return _reward_fn
 
 
