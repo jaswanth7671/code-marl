@@ -84,27 +84,20 @@ def load_model_qlora(model_id: str = MODEL_ID):
 
 
 def format_for_grpo(problem: dict) -> str:
-    """Format a HumanEval problem so the model completion IS the code.
+    """Format a HumanEval problem for GRPO training.
 
-    WHY: We end the prompt with ```python\\n + the function signature.
-    The model then continues directly with the function body.
-    This guarantees the completion is Python code — no need to hope the
-    model wraps output in code blocks.
+    WHY: The prompt must NOT include the function signature.
+    If it did, the model would only write the body (no 'def'),
+    and the sandbox can't run a bare body without the definition.
 
-    Example prompt ending:
-        ...write the implementation below:
-
-        ```python
-        def add(a: int, b: int) -> int:
-            \"\"\"Return the sum.\"\"\"
-
-    The model completes from here, writing the body directly.
+    Instead we show the spec and ask for the COMPLETE function.
+    The model writes 'def ...' → parse.py strategy 4 finds it → reward works.
     """
     prompt_text = problem["prompt"].strip()
     return (
-        f"Complete the Python function below. "
-        f"Write only the implementation — no explanation needed.\n\n"
-        f"```python\n{prompt_text}"
+        f"Write a complete Python implementation for the function below.\n"
+        f"Return ONLY the code starting with 'def'. No explanation.\n\n"
+        f"Specification:\n{prompt_text}"
     )
 
 
