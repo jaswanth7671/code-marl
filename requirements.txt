@@ -12,10 +12,8 @@ peft>=0.10.0                  # LoRA, QLoRA adapter framework
 # ── GRPO / RL Training ────────────────────────────────────────────────────────
 trl>=0.9.0                    # GRPOTrainer (requires trl >= 0.9)
 
-# ── Flash Attention 2 (install separately — needs CUDA build) ────────────────
-# On Colab A100, run this cell FIRST before importing transformers:
-#   !pip install flash-attn --no-build-isolation
-flash-attn>=2.5.0
+# Note: Using SDPA (built into PyTorch 2.x) instead of flash-attn.
+# SDPA requires no installation and works on all Colab GPUs.
 
 # ── Experiment Tracking ───────────────────────────────────────────────────────
 wandb>=0.16.0

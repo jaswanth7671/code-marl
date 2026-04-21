@@ -118,7 +118,7 @@ def load_model_qlora(model_id: str = MODEL_ID):
         quantization_config=get_qlora_config(),
         device_map="auto",
         trust_remote_code=True,
-        attn_implementation="flash_attention_2",  # Flash Attention 2: 2-4x faster
+        attn_implementation="sdpa",  # built into PyTorch 2.x, no install needed
     )
 
     # Step 2: Prepare for k-bit training (required before adding LoRA)

@@ -1,8 +1,11 @@
 """
-model.py — Shared local model loader (4-bit QLoRA + Flash Attention 2).
+model.py — Shared local model loader (4-bit QLoRA + SDPA attention).
 
 For the debate loop (inference only — no training here), we load the model
 in 4-bit so it fits comfortably on a Colab A100 alongside other things.
+
+Uses SDPA (Scaled Dot Product Attention) — built into PyTorch 2.x,
+no separate installation needed. Nearly as fast as Flash Attention 2.
 
 Loaded once as a singleton → shared by CoderAgent and CriticAgent.
 """
@@ -62,7 +65,7 @@ def load_model(model_id: str = MODEL_ID) -> None:
         quantization_config=bnb_config,
         device_map="auto",
         trust_remote_code=True,
-        attn_implementation="flash_attention_2",  # 2-4x faster attention
+        attn_implementation="sdpa",  # built into PyTorch 2.x, no install needed
     )
 
     _pipeline = pipeline(
