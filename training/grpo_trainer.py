@@ -76,6 +76,7 @@ def load_model_qlora(model_id: str = MODEL_ID):
     base_model = prepare_model_for_kbit_training(
         base_model,
         use_gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
     )
 
     model = get_peft_model(base_model, get_lora_config())
@@ -132,6 +133,7 @@ def build_grpo_config(
         per_device_train_batch_size=1,
         gradient_accumulation_steps=8,
         gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
         bf16=is_bf16,
         fp16=not is_bf16,
         logging_steps=1,

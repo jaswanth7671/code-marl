@@ -9,6 +9,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
 from environment.sandbox import execute_code
 from utils.parse import extract_code
 
@@ -60,10 +61,15 @@ def reward_fn(
     if test_cases is None:
         test_cases = kwargs.get("test_cases", None)
 
+    _debug = os.environ.get("MARL_DEBUG", "0") == "1"
+
     rewards = []
     for i, completion in enumerate(completions):
         try:
             text = _get_text(completion)
+
+            if _debug and i == 0:
+                print(f"\n[DEBUG] completion[0] (first 300 chars):\n{repr(text[:300])}\n")
 
             # Try extracting code normally
             code = extract_code(text)
@@ -74,6 +80,9 @@ def reward_fn(
                 if "```python" in prompt_text:
                     # Wrap completion in fences and try again
                     code = extract_code(f"```python\n{text}\n```")
+
+            if _debug and i == 0:
+                print(f"[DEBUG] extracted code (first 200 chars):\n{repr(code[:200]) if code else 'EMPTY — reward=0'}\n")
 
             if not code:
                 rewards.append(0.0)
