@@ -32,7 +32,7 @@ def load_humaneval(split: str = "test", max_problems: Optional[int] = None) -> l
         List of dicts, each with keys: problem_id, prompt, test_code, entry_point.
     """
     try:
-        ds = load_dataset("openai/openai_humaneval", split=split, trust_remote_code=True)
+        ds = load_dataset("openai/openai_humaneval", split=split)
     except Exception as e:
         raise RuntimeError(
             f"Failed to load HumanEval dataset. "

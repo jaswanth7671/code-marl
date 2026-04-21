@@ -71,13 +71,19 @@ def execute_code(
     script_parts.append("_total = 0")
     for line in test_code.splitlines():
         stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue  # skip blank lines and comments
         if stripped.startswith("assert"):
+            # wrap each assert in try/except for partial credit
             script_parts.append(f"_total += 1")
             script_parts.append(f"try:")
             script_parts.append(f"    {stripped}")
             script_parts.append(f"    _passed += 1")
             script_parts.append(f"except Exception:")
             script_parts.append(f"    pass")
+        else:
+            # setup lines like `result = fizzbuzz(15)` — run as-is
+            script_parts.append(stripped)
     script_parts.append(f"print(f'RESULT:{{_passed}}:{{_total}}')")
 
     full_script = "\n".join(script_parts)

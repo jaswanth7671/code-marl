@@ -45,10 +45,13 @@ def load_model(model_id: str = MODEL_ID) -> None:
 
     print(f"[model] Loading {model_id} in 4-bit...")
 
+    # T4 uses float16 (no bfloat16 support), A100 uses bfloat16
+    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_compute_dtype=compute_dtype,
         bnb_4bit_use_double_quant=True,
     )
 

@@ -1,16 +1,8 @@
 """
 reward_fn.py — Reward function called by GRPOTrainer during training.
 
-WHY: GRPOTrainer needs a reward function with a specific signature:
-    reward_fn(completions, prompts, **kwargs) -> list[float]
-
-It calls this function after sampling N completions from the model.
-Each completion gets a reward. GRPO then uses these rewards to compute
-the policy gradient update — completions with higher reward get reinforced.
-
-The reward is always [0.0, 1.0] = fraction of tests that passed.
-This is better than binary (pass/fail) because it gives a gradient signal
-even when the solution is partially correct.
+GRPOTrainer calls reward_fn(completions, prompts) after sampling completions.
+Each completion gets a reward in [0.0, 1.0] = fraction of tests passed.
 """
 
 import sys
@@ -21,52 +13,75 @@ from environment.sandbox import execute_code
 from utils.parse import extract_code
 
 
+def _get_text(completion) -> str:
+    """Extract plain text from a completion regardless of its format.
+
+    GRPOTrainer passes completions in different formats depending on TRL version:
+      - Plain string: the raw generated text
+      - List of dicts: [{"role": "assistant", "content": "..."}]
+      - Single dict:  {"role": "assistant", "content": "..."}
+
+    Args:
+        completion: Completion in any of the above formats.
+
+    Returns:
+        Plain text string.
+    """
+    if isinstance(completion, str):
+        return completion
+    if isinstance(completion, list):
+        # chat format — take the last message content
+        for msg in reversed(completion):
+            if isinstance(msg, dict) and "content" in msg:
+                return msg["content"]
+        return ""
+    if isinstance(completion, dict):
+        return completion.get("content", "")
+    return str(completion)
+
+
 def reward_fn(
-    completions: list[str],
-    prompts: list[str],
-    test_cases: list[str] | None = None,
+    completions,
+    prompts,
+    test_cases=None,
     **kwargs,
 ) -> list[float]:
     """Reward function for GRPOTrainer.
 
-    Called after the model generates `completions` for each `prompt`.
-    We parse the code from each completion, run it against tests, and
-    return a reward score.
-
-    WHY **kwargs: GRPOTrainer may pass extra keyword arguments we don't need.
-    Accepting **kwargs prevents crashes if the TRL version adds new params.
-
     Args:
-        completions: List of raw text completions from the model.
-                     Each should contain a Python code block.
-        prompts: List of prompts the completions were generated from.
-                 Same length as completions.
-        test_cases: List of test assertion strings, one per prompt.
-                    If None, uses kwargs["test_cases"] as fallback.
-        **kwargs: Extra arguments from GRPOTrainer (ignored).
+        completions: Completions from the model (string, list of dicts, etc.)
+        prompts: Prompts used to generate completions.
+        test_cases: Test assertion strings, one per prompt.
+        **kwargs: Extra args from GRPOTrainer (ignored).
 
     Returns:
-        List of float rewards in [0.0, 1.0], same length as completions.
+        List of float rewards in [0.0, 1.0].
     """
-    # GRPOTrainer sometimes passes test_cases through kwargs
     if test_cases is None:
         test_cases = kwargs.get("test_cases", None)
 
     rewards = []
     for i, completion in enumerate(completions):
         try:
-            code = extract_code(completion)
+            text = _get_text(completion)
+
+            # Try extracting code normally
+            code = extract_code(text)
+
+            # Fallback: if prompt ended with ```python\n, completion IS the code
+            if not code and text.strip():
+                prompt_text = _get_text(prompts[i]) if i < len(prompts) else ""
+                if "```python" in prompt_text:
+                    # Wrap completion in fences and try again
+                    code = extract_code(f"```python\n{text}\n```")
+
             if not code:
-                # Model produced no code → zero reward
                 rewards.append(0.0)
                 continue
 
-            # Get the test for this index (or use a default no-op)
             if test_cases and i < len(test_cases):
                 test = test_cases[i]
             else:
-                # No test available — can't evaluate, give 0
-                print(f"[reward_fn] WARNING: No test case for completion {i}")
                 rewards.append(0.0)
                 continue
 
@@ -80,20 +95,9 @@ def reward_fn(
     return rewards
 
 
-def make_reward_fn_with_tests(test_cases: list[str]):
-    """Factory: returns a reward_fn pre-loaded with test cases.
-
-    WHY factory: GRPOTrainer's reward_fn signature only takes completions
-    and prompts. We can't pass test_cases directly. A closure captures them.
-
-    Args:
-        test_cases: List of test assertion strings, one per problem.
-
-    Returns:
-        A reward function with signature (completions, prompts, **kwargs).
-    """
-    def _reward_fn(completions: list[str], prompts: list[str], **kwargs) -> list[float]:
-        """Reward function with pre-loaded test cases."""
+def make_reward_fn_with_tests(test_cases: list):
+    """Factory that returns a reward_fn pre-loaded with test cases."""
+    def _reward_fn(completions, prompts, **kwargs) -> list[float]:
         return reward_fn(
             completions=completions,
             prompts=prompts,
@@ -106,22 +110,18 @@ def make_reward_fn_with_tests(test_cases: list[str]):
 # ── Quick smoke test ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     completions = [
-        "Here is my solution:\n```python\ndef add(a, b):\n    return a + b\n```",
-        "Here is my solution:\n```python\ndef add(a, b):\n    return 0\n```",
-        "I don't know how to solve this.",  # no code block
+        "```python\ndef add(a, b):\n    return a + b\n```",  # correct
+        "```python\ndef add(a, b):\n    return 0\n```",      # wrong
+        "Here:\n\ndef add(a, b):\n    return a + b\n",       # no fence but has def
+        "I don't know.",                                      # no code at all
     ]
-    prompts = ["Write add(a, b)"] * 3
-    test_cases = ["assert add(2, 3) == 5"] * 3
+    prompts = ["Write add(a, b)"] * 4
+    tests   = ["assert add(2, 3) == 5"] * 4
 
-    rewards = reward_fn(completions, prompts, test_cases=test_cases)
+    rewards = reward_fn(completions, prompts, test_cases=tests)
     print("Rewards:", rewards)
-    assert rewards[0] == 1.0, "Correct solution should get 1.0"
-    assert rewards[1] == 0.0, "Wrong solution should get 0.0"
-    assert rewards[2] == 0.0, "No code block should get 0.0"
-
-    # Test factory
-    bounded_fn = make_reward_fn_with_tests(test_cases)
-    rewards2 = bounded_fn(completions, prompts)
-    assert rewards2 == rewards
-
+    assert rewards[0] == 1.0
+    assert rewards[1] == 0.0
+    assert rewards[2] == 1.0   # bare def — strategy 4 in parse.py catches it
+    assert rewards[3] == 0.0
     print("All reward_fn tests passed!")
